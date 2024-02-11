@@ -1,48 +1,54 @@
 from flask import Flask, jsonify
-import Adafruit_DHT
-import time
-import Adafruit_MQTT
-import Adafruit_MQTT.MQTT_Client as MQTT_Client
+import adafruit_dht
+import board
+import mysql.connector
 
 app = Flask(__name__)
 
-# DHT11 sensor setup
-DHT_SENSOR = Adafruit_DHT.DHT11
-DHT_PIN = 4
+# Connect to MySQL
+db = mysql.connector.connect(
+    host="localhost",
+    user="your_username",
+    password="your_password",
+    database="your_database"
+)
 
-# MQ137 sensor setup
-MQ137_PIN = 17  # Example pin, adjust to your setup
+# Initialize DHT11 sensor
+dht_sensor = adafruit_dht.DHT11(board.D4)
 
-# Function to read DHT11 sensor
-def read_dht11_sensor():
-    humidity, temperature = Adafruit_DHT.read_retry(DHT_SENSOR, DHT_PIN)
-    if humidity is not None and temperature is not None:
-        return {
-            "temperature": temperature,
-            "humidity": humidity
-        }
-    else:
-        return {
-            "error": "Failed to retrieve DHT11 readings"
-        }
+# Endpoint to get sensor data
+@app.route('/sensor_data')
+def get_sensor_data():
+    try:
+        # Read temperature and humidity from DHT11
+        temperature_c = dht_sensor.temperature
+        humidity = dht_sensor.humidity
 
-# Function to read MQ137 sensor
+        # Read gas concentration from MQ137
+        gas_concentration = read_mq137_sensor()
+
+        # Save data to MySQL database
+        save_to_database(temperature_c, humidity, gas_concentration)
+
+        return jsonify({
+            'temperature': temperature_c,
+            'humidity': humidity,
+            'gas_concentration': gas_concentration
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 def read_mq137_sensor():
-    # Example code for reading from MQ137, adjust accordingly
-    # mq137_reading = read_from_mq137_sensor(MQ137_PIN)
-    # return mq137_reading
-    return {
-        "reading": 0.0  # Placeholder value, replace with actual reading
-    }
+    # Code to read gas sensor data goes here
+    # Replace this with actual code to read data from MQ137
+    return 0
 
-@app.route('/api/sensors', methods=['GET'])
-def get_sensor_readings():
-    dht11_reading = read_dht11_sensor()
-    mq137_reading = read_mq137_sensor()
-    return jsonify({
-        "DHT11": dht11_reading,
-        "MQ137": mq137_reading
-    })
+def save_to_database(temperature, humidity, gas_concentration):
+    cursor = db.cursor()
+    sql = "INSERT INTO sensor_data (temperature, humidity, gas_concentration) VALUES (%s, %s, %s)"
+    val = (temperature, humidity, gas_concentration)
+    cursor.execute(sql, val)
+    db.commit()
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=True)
